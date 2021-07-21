@@ -1,3 +1,4 @@
+"""Thermal base module."""
 import io
 import json
 import subprocess as sp
@@ -8,28 +9,28 @@ from threading import Thread
 import cv2 as cv
 import numpy as np
 from logzero import logger
-from matplotlib import cm
 from matplotlib import pyplot as plt
 from PIL import Image
 from tqdm import tqdm
 
 from . import flyr_unpack
+from . import utils as ThermalImageHelpers
 
 plt.style.use("ggplot")
 
 
 class ThermalImage:
+    """Thermal Image class."""
     def __init__(self, image_path, camera_manufacturer, color_map="jet", thermal_np=None):
-        """
-        Base Class for Thermal Images
+        """Base Class for Thermal Images.
 
         Args:
             image_path (str): Path of image to be loaded
-            color_map (str, optional): The default colour map to be used when loading the image. Defaults to "jet".
             camera_manufacturer (str, optional): Which type of thermal camera was the image captured from.
                 Supported values: ["flir","dji"].
+            color_map (str, optional): The default colour map to be used when loading the image. Defaults to "jet".
+            thermal_np (np.ndarray): Initialize directly with temp array.
         """
-
         self.image_path = image_path
         # Convert the string false colour map to an opencv object
         self.cmap = getattr(cv, f"COLORMAP_{color_map.upper()}")
@@ -51,8 +52,7 @@ class ThermalImage:
         self.global_max_temp = np.max(self.thermal_np)
 
     def extract_temperatures_flir(self):
-        """Extracts the FLIR-encoded thermal image as 2D floating-point numpy array with temperatures in degC"""
-
+        """Extracts the FLIR-encoded thermal image as 2D floating-point numpy array with temperatures in degC."""
         # read image metadata needed for conversion of the raw sensor values
         # E=1,SD=1,RTemp=20,ATemp=RTemp,IRWTemp=RTemp,IRT=1,RH=50,PR1=21106.77,PB=1501,PF=1,PO=-7340,PR2=0.012545258
         exif_binary = "exiftool.exe" if "win" in sys.platform else "exiftool"
@@ -98,8 +98,7 @@ class ThermalImage:
         return thermal_np, raw_sensor_np, meta
 
     def extract_temperatures_dji(self):
-        """Extracts the DJI-encoded thermal image as 2D floating-point numpy array with temperatures in degC"""
-
+        """Extracts the DJI-encoded thermal image as 2D floating-point numpy array with temperatures in degC."""
         # read image metadata for the dji camera images
         exif_binary = "exiftool.exe" if "win" in sys.platform else "exiftool"
         meta = sp.Popen(
@@ -137,22 +136,22 @@ class ThermalImage:
         raw_sensor_np = np.array(img)
 
         ## extracting the temperatures from thermal images
-        thermal_np = ThermalImageHelpers.sensor_vals_to_temp(raw_sensor_np)
+        thermal_np = ThermalImageHelpers.sensor_vals_to_temp(raw_sensor_np, **meta)
 
         return thermal_np, raw_sensor_np, meta
 
     def generate_colorbar(self, min_temp=None, max_temp=None, cmap=cv.COLORMAP_JET, height=None):
-        """
-        Function to generate a colourbar image that can be stitched to the side of your thermal image
+        """Function to generate a colourbar image that can be stitched to the side of your thermal image.
 
         Args:
-            min_temp (int, optional): Minimum temperature on colourbar. If not passed, then the image's minimum
-                temperature is taken. Defaults to None.
-            max_temp (int, optional): Maximum temperature on colourbar. If not passed, then the image's maximum
-                temperature is taken. Defaults to None.
-            cmap (cv Colormap, optional): Which false colour mapping to use for the colourbar. Defaults to cv.COLORMAP_JET.
-            height (int, optional): Height of the colourbar canvas to be used. If not passed, takes the height of
-                the thermal image. Defaults to None.
+            min_temp (int, optional): Minimum temperature on colourbar.
+                If not passed, then the image's minimumtemperature is taken. Defaults to None.
+            max_temp (int, optional): Maximum temperature on colourbar.
+                If not passed, then the image's maximumtemperature is taken. Defaults to None.
+            cmap (cv Colormap, optional): Which false colour mapping to use for the colourbar.
+                Defaults to cv.COLORMAP_JET.
+            height (int, optional): Height of the colourbar canvas to be used.
+                If not passed, takes the height of the thermal image. Defaults to None.
 
         Returns:
             np.ndarray: A colourbar of the required height with temperature values labelled
@@ -188,8 +187,8 @@ class ThermalImage:
         return cb_canvas
 
     def save_thermal_image(self, output_path):
-        """
-        Converts the floating-point temperature array into an image and saves the image
+        """Converts the floating-point temperature array into an image and saves the image.
+
         Takes the current `self.thermal_np` temperature array, converts it to image-friendly uint8 format. Then it
         computes and stitches a colourbar for required scale. Finally it saves the image to the specified output path
 
@@ -203,267 +202,8 @@ class ThermalImage:
         cv.imwrite(str(output_path), cmapped_thermal_img)
 
 
-class ThermalImageHelpers:
-    @staticmethod
-    def sensor_vals_to_temp(
-        raw,
-        Emissivity=1.0,
-        ObjectDistance=1,
-        AtmosphericTemperature=20,
-        ReflectedApparentTemperature=20,
-        IRWindowTemperature=20,
-        IRWindowTransmission=1,
-        RelativeHumidity=50,
-        PlanckR1=21106.77,
-        PlanckB=1501,
-        PlanckF=1,
-        PlanckO=-7340,
-        PlanckR2=0.012545258,
-        **kwargs,
-    ):
-        """Convert raw values from the thermographic sensor sensor to temperatures in °C. Tested for Flir cams"""
-        # this calculation has been ported to python from https://github.com/gtatters/Thermimage/blob/master/R/raw2temp.R
-        # a detailed explanation of what is going on here can be found there
-
-        # constants
-        ATA1 = 0.006569
-        ATA2 = 0.01262
-        ATB1 = -0.002276
-        ATB2 = -0.00667
-        ATX = 1.9
-
-        # transmission through window (calibrated)
-        emiss_wind = 1 - IRWindowTransmission
-        refl_wind = 0
-        # transmission through the air
-        h2o = (RelativeHumidity / 100) * np.exp(
-            1.5587
-            + 0.06939 * (AtmosphericTemperature)
-            - 0.00027816 * (AtmosphericTemperature) ** 2
-            + 0.00000068455 * (AtmosphericTemperature) ** 3
-        )
-        tau1 = ATX * np.exp(-np.sqrt(ObjectDistance / 2) * (ATA1 + ATB1 * np.sqrt(h2o))) + (1 - ATX) * np.exp(
-            -np.sqrt(ObjectDistance / 2) * (ATA2 + ATB2 * np.sqrt(h2o))
-        )
-        tau2 = ATX * np.exp(-np.sqrt(ObjectDistance / 2) * (ATA1 + ATB1 * np.sqrt(h2o))) + (1 - ATX) * np.exp(
-            -np.sqrt(ObjectDistance / 2) * (ATA2 + ATB2 * np.sqrt(h2o))
-        )
-        # radiance from the environment
-        raw_refl1 = (
-            PlanckR1 / (PlanckR2 * (np.exp(PlanckB / (ReflectedApparentTemperature + 273.15)) - PlanckF)) - PlanckO
-        )
-        raw_refl1_attn = (1 - Emissivity) / Emissivity * raw_refl1  # Reflected component
-
-        raw_atm1 = (
-            PlanckR1 / (PlanckR2 * (np.exp(PlanckB / (AtmosphericTemperature + 273.15)) - PlanckF)) - PlanckO
-        )  # Emission from atmosphere 1
-        raw_atm1_attn = (1 - tau1) / Emissivity / tau1 * raw_atm1  # attenuation for atmospheric 1 emission
-
-        raw_wind = (
-            PlanckR1 / (PlanckR2 * (np.exp(PlanckB / (IRWindowTemperature + 273.15)) - PlanckF)) - PlanckO
-        )  # Emission from window due to its own temp
-        raw_wind_attn = (
-            emiss_wind / Emissivity / tau1 / IRWindowTransmission * raw_wind
-        )  # Componen due to window emissivity
-
-        raw_refl2 = (
-            PlanckR1 / (PlanckR2 * (np.exp(PlanckB / (ReflectedApparentTemperature + 273.15)) - PlanckF)) - PlanckO
-        )  # Reflection from window due to external objects
-        raw_refl2_attn = (
-            refl_wind / Emissivity / tau1 / IRWindowTransmission * raw_refl2
-        )  # component due to window reflectivity
-
-        raw_atm2 = (
-            PlanckR1 / (PlanckR2 * (np.exp(PlanckB / (AtmosphericTemperature + 273.15)) - PlanckF)) - PlanckO
-        )  # Emission from atmosphere 2
-        raw_atm2_attn = (
-            (1 - tau2) / Emissivity / tau1 / IRWindowTransmission / tau2 * raw_atm2
-        )  # attenuation for atmospheric 2 emission
-
-        raw_obj = (
-            raw / Emissivity / tau1 / IRWindowTransmission / tau2
-            - raw_atm1_attn
-            - raw_atm2_attn
-            - raw_wind_attn
-            - raw_refl1_attn
-            - raw_refl2_attn
-        )
-        val_to_log = PlanckR1 / (PlanckR2 * (raw_obj + PlanckO)) + PlanckF
-        if any(val_to_log.ravel() < 0):
-            print("Image seems to be corrupted")
-            val_to_log = np.where(val_to_log < 0, sys.float_info.min, val_to_log)
-        # temperature from radiance
-        return PlanckB / np.log(val_to_log) - 273.15
-
-    @staticmethod
-    def parse_from_exif_str(temp_str):
-        # we assume degrees celsius for temperature, metres for length
-        if type(temp_str) != str:
-            return float(temp_str)
-        return float(temp_str.split()[0])
-
-    @staticmethod
-    def __normalize_temp_matrix(thermal_np):
-        """Normalize a temperature matrix to the 0-255 uint8 image range"""
-        num = thermal_np - np.amin(thermal_np)
-        den = np.amax(thermal_np) - np.amin(thermal_np)
-        thermal_np = num / den
-        return thermal_np
-
-    @staticmethod
-    def get_cmapped_temp_image(thermal_np, colormap=cv.COLORMAP_JET):
-        """Converts a temperature matrix into a numpy image"""
-        thermal_np_norm = ThermalImageHelpers.__normalize_temp_matrix(thermal_np)
-        thermal_image = np.array(thermal_np_norm * 255, dtype=np.uint8)
-        if colormap != None:
-            thermal_image = cv.applyColorMap(thermal_image, colormap)
-        return thermal_image
-
-    @staticmethod
-    def cmap_matplotlib(frame, cmap="jet"):
-        frame_x = frame.copy()
-        frame_x -= np.min(frame_x)
-        frame_x /= np.max(frame_x)
-
-        return (255 * getattr(cm, cmap)(frame_x)[..., 2::-1]).astype(np.uint8)
-
-    @staticmethod
-    def get_temp_image(thermal_np, colormap=cv.COLORMAP_JET):
-        """Alias for ThermalImageHelpers.get_cmapped_temp_image, to be deprecated in the future"""
-        return ThermalImageHelpers.get_cmapped_temp_image(thermal_np, colormap)
-
-    @staticmethod
-    def get_roi(thermal_np, raw_sensor_np, Contours, index, area_rect=None):
-        """
-        Fetches the sensor values, temperature values and indices (indices within bounding rect) of a Region of
-        Interest (RoI) within a temperature+sensor array
-        """
-        raw_roi_values = []
-        thermal_roi_values = []
-        indices = []
-
-        if area_rect is None:
-            img2 = np.zeros((thermal_np.shape[0], thermal_np.shape[1], 1), np.uint8)
-            cv.drawContours(img2, Contours, index, 255, -1)
-            x, y, w, h = cv.boundingRect(Contours[index])
-
-            indices = np.arange(w * h)
-            ind = np.where(img2[:, :, 0] == 255)
-            indices = indices[np.where(img2[y : y + h, x : x + w, 0].flatten() == 255)]
-            raw_roi_values = raw_sensor_np[ind]
-            thermal_roi_values = thermal_np[ind]
-
-        else:
-            x, y, w, h = area_rect
-            raw_roi_values = raw_sensor_np[y : y + h, x : x + w]
-            thermal_roi_values = thermal_np[y : y + h, x : x + w]
-
-        return raw_roi_values, thermal_roi_values, indices
-
-    @staticmethod
-    def clip_temp_to_roi(thermal_np, thermal_roi_values):
-        """
-        Given an RoI within a temperature matrix, this function clips the temperature values in the entire thermal
-        image temperature values above and below the max/min temperatures within the RoI are clipped to said max/min
-
-        Args:
-            thermal_np (np.ndarray): Floating point array containing the temperature matrix
-            thermal_roi_values (np.ndarray / list): Any iterable containing the temperature values within the RoI
-
-        Returns:
-            np.ndarray: The clipped temperature matrix
-        """
-        maximum = np.amax(thermal_roi_values)
-        minimum = np.amin(thermal_roi_values)
-        thermal_np[thermal_np > maximum] = maximum
-        thermal_np[thermal_np < minimum] = minimum
-        return thermal_np
-
-    @staticmethod
-    def scale_with_roi(thermal_np, thermal_roi_values):
-        """Alias for ThermalImageHelpers.clip_temp_to_roi, to be deprecated in the future"""
-        ThermalImageHelpers.clip_temp_to_roi(thermal_np, thermal_roi_values)
-
-    @staticmethod
-    def coordinates_in_poly(polygon_points, frame_shape=(512, 640)):
-        """Returns indices of points within a polygon specified by polygon_points.
-
-        Args:
-            polygon_points (list): list of ordered coordinates.
-        Returns:
-            tuple: Indices of points within a polygon.
-        """
-        mask = np.zeros(frame_shape, dtype=np.uint8)
-        cv.fillPoly(mask, pts=[np.array(polygon_points)], color=255)
-        return np.where(mask > 0)
-
-    @staticmethod
-    def change_emissivity_for_roi(
-        thermal_np,
-        meta,
-        roi_contours,
-        raw_roi_values,
-        indices,
-        new_emissivity=None,
-        ref_temperature=None,
-        atm_temperature=None,
-        np_indices=False,
-    ):
-        """Changes the Emissivity for pixels in a given region (RoI) and returns the new temperature matrix"""
-        if np_indices:
-            meta_x = meta.copy()
-            if new_emissivity not in (None, ""):
-                meta_x["Emissivity"] = float(new_emissivity)
-            if ref_temperature not in (None, ""):
-                meta_x["ReflectedApparentTemperature"] = float(ref_temperature)
-            if atm_temperature not in (None, ""):
-                meta_x["AtmosphericTemperature"] = float(atm_temperature)
-
-            return ThermalImageHelpers.sensor_vals_to_temp(raw_roi_values, **meta_x)
-
-        x, y, w, h = cv.boundingRect(roi_contours[0])
-        temp_array = thermal_np.copy()
-        roi_rectangle = temp_array[y : y + h, x : x + w]
-        roi_rectangle_flat = roi_rectangle.flatten()
-        roi_raw_sensor_np = np.asarray(raw_roi_values)
-
-        if new_emissivity is None:
-            new_emissivity = float(input("Enter new Emissivity: "))
-
-        meta_x = meta.copy()
-        meta_x["Emissivity"] = new_emissivity
-
-        raw_roi_values_thermal_np = ThermalImageHelpers.sensor_vals_to_temp(roi_raw_sensor_np, **meta_x)
-
-        count = 0
-        for i in range(0, len(roi_rectangle_flat)):
-            if i in indices:
-                roi_rectangle_flat[i] = raw_roi_values_thermal_np[count]
-                count += 1
-
-        temp_array[y : y + h, x : x + w] = roi_rectangle_flat.reshape((h, w))
-        return temp_array
-
-    @staticmethod
-    def default_scaling_image(array, cmap=cv.COLORMAP_JET):
-        """Scales temperature vals for the whole image to be clipped to ~min and max around the mid line"""
-        thermal_np = array.copy()
-        mid_thermal_np = thermal_np[10 : thermal_np.shape[0] - 10, (int)(thermal_np.shape[1] / 2)]
-        maximum = np.amax(mid_thermal_np)
-        minimum = np.amin(mid_thermal_np)
-
-        thermal_np[thermal_np > maximum + 10] = maximum + 10
-        thermal_np[thermal_np < minimum - 5] = minimum - 5
-        image = ThermalImageHelpers.get_cmapped_temp_image(thermal_np, colormap=cmap)
-
-        return image, thermal_np
-
-
 class ThermalImageAnnotation:
-    """
-    Base Class for Drawing on thermographs
-    """
-
+    """Base Class for Drawing on thermographs."""
     line_flag = False
     contour = []
     drawing = False
@@ -485,6 +225,7 @@ class ThermalImageAnnotation:
 
     @staticmethod
     def draw_contour_area(event, x, y, flags, params):
+        """Draw contour area."""
         thermal_image = params[0]
         contours = params[1]
 
@@ -493,13 +234,13 @@ class ThermalImageAnnotation:
         point2 = params[2][2]
 
         if event == cv.EVENT_LBUTTONDOWN:
-            if ThermalImageAnnotation.drawing == False:
+            if not ThermalImageAnnotation.drawing:
                 ThermalImageAnnotation.drawing = True
                 if is_rect:
                     point1[0] = (x, y)
 
         elif event == cv.EVENT_MOUSEMOVE:
-            if ThermalImageAnnotation.drawing == True:
+            if ThermalImageAnnotation.drawing:
                 if not is_rect:
                     cv.circle(thermal_image, (x, y), 1, (0, 0, 0), -1)
                     ThermalImageAnnotation.contour.append((x, y))
@@ -515,23 +256,25 @@ class ThermalImageAnnotation:
 
     @staticmethod
     def draw_spots(event, x, y, flags, params):
+        """Draw spots."""
         point = params[0]
         flag = params[1]
         point.clear()
 
         if event == cv.EVENT_MOUSEMOVE:
-            if ThermalImageAnnotation.drawing == True:
+            if ThermalImageAnnotation.drawing:
                 point.append(x)
                 point.append(y)
 
         elif event == cv.EVENT_LBUTTONDOWN:
-            ThermalImageAnnotation.drawing == False
+            ThermalImageAnnotation.drawing = False
             point.append(x)
             point.append(y)
             flag[0] = False
 
     @staticmethod
     def get_spots(thermal_image):
+        """Get spots."""
         ThermalImageAnnotation.drawing = True
         image_copy = thermal_image.copy()
         original_copy = image_copy.copy()
@@ -549,20 +292,20 @@ class ThermalImageAnnotation:
                 cv.circle(image_copy, spot_points[i], 5, 0, -1)
                 try:
                     cv.circle(cmap_copy, spot_points[i], 5, 0, -1)
-                except:
+                except Exception:
                     cv.circle(original_copy, spot_points[i], 5, 0, -1)
 
             if len(point) > 0:
                 cv.circle(image_copy, tuple(point), 5, 0, -1)
 
-            if flag[0] == False:
+            if not flag[0]:
                 spot_points.append(tuple(point))
                 flag[0] = True
 
             cv.imshow("Image", image_copy)
             k = cv.waitKey(1) & 0xFF
 
-            if k == 13 or k == 141:
+            if k in (13, 141):
                 break
 
         ThermalImageAnnotation.drawing = False
@@ -573,12 +316,13 @@ class ThermalImageAnnotation:
         else:
             gray = cv.cvtColor(cmap_copy, cv.COLOR_BGR2GRAY)
 
-        ret, thresh = cv.threshold(gray, 10, 255, cv.THRESH_BINARY_INV)
-        contours, hierarchy = cv.findContours(thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+        _, thresh = cv.threshold(gray, 10, 255, cv.THRESH_BINARY_INV)
+        contours, _ = cv.findContours(thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
         ThermalImageAnnotation.spots = contours
 
     @staticmethod
     def get_spots_values(thermal_np, raw_sensor_np, contours):
+        """Get spots values."""
         spots_measurement_values = []
         for i in range(0, len(contours)):
             spots_measurement_values.append(ThermalImageHelpers.get_roi(thermal_np, raw_sensor_np, contours, i)[1])
@@ -587,14 +331,14 @@ class ThermalImageAnnotation:
 
     @staticmethod
     def draw_line(event, x, y, flags, params):
-
+        """Draw line."""
         lp1, lp2 = params[0], params[1]
         thermal_image = params[2]
 
         if len(lp1) <= 2 and len(lp2) < 2:
             if event == cv.EVENT_LBUTTONDOWN:
-                ThermalImageAnnotation.line_flag = not (ThermalImageAnnotation.line_flag)
-                if ThermalImageAnnotation.line_flag == True:
+                ThermalImageAnnotation.line_flag = not ThermalImageAnnotation.line_flag
+                if ThermalImageAnnotation.line_flag:
                     lp1.append(x)
                     lp1.append(y)
 
@@ -607,6 +351,7 @@ class ThermalImageAnnotation:
 
     @staticmethod
     def get_line(image):
+        """Get line."""
         point1 = []
         point2 = []
 
@@ -617,7 +362,7 @@ class ThermalImageAnnotation:
             cv.imshow("image", image)
             k = cv.waitKey(1) & 0xFF
 
-            if k == 13 or k == 141:
+            if k in (13, 141):
                 break
 
         cv.destroyWindow("image")
@@ -660,6 +405,7 @@ class ThermalImageAnnotation:
 
     @staticmethod
     def line_measurement(image, thermal_np, cmap=cv.COLORMAP_JET, plt_title="Linw Plot"):
+        """Line measurement."""
         logger.info("Please click on the two extreme points of the line")
         img = image.copy()
         line, point1, point2 = ThermalImageAnnotation.get_line(img)
@@ -693,17 +439,18 @@ class ThermalImageAnnotation:
 
     @staticmethod
     def is_in_rect(rectangle, point):
+        """Check if point in rectangle."""
         tlx, tly, w, h = rectangle
         px, py = point
         is_inside = False
-        if px > tlx and px < tlx + w:
-            if py > tly and py < tly + h:
+        if tlx < px < tlx + w:
+            if tly < py < tly + h:
                 is_inside = True
         return is_inside
 
     @staticmethod
     def move_contours(event, x, y, flags, params):  # scale contour,emissivity contours
-
+        """Move contours."""
         ThermalImageAnnotation.xdisp = None
         ThermalImageAnnotation.ydisp = None
         measurement_contours = params[0]
@@ -718,13 +465,13 @@ class ThermalImageAnnotation:
         if len(scale_contours) > 0:
             scale_contour = scale_contours[0]
 
-        if ThermalImageAnnotation.measurement_moving == True:
+        if ThermalImageAnnotation.measurement_moving:
             measurement_cont = measurement_contours[ThermalImageAnnotation.measurement_index]
 
-        if ThermalImageAnnotation.rect_moving == True:
+        if ThermalImageAnnotation.rect_moving:
             measurement_rect = measurement_rects[ThermalImageAnnotation.rect_index]
 
-        if ThermalImageAnnotation.spots_moving == True:
+        if ThermalImageAnnotation.spots_moving:
             spot_cont = spot_contours[ThermalImageAnnotation.spots_index]
 
         if event == cv.EVENT_RBUTTONDOWN:
@@ -737,8 +484,8 @@ class ThermalImageAnnotation:
                     break
 
             for i in range(0, len(measurement_rects)):
-                if x >= measurement_rects[i][0] and x <= (measurement_rects[i][0] + measurement_rects[i][2]):
-                    if y >= measurement_rects[i][1] and y <= (measurement_rects[i][1] + measurement_rects[i][3]):
+                if measurement_rects[i][0] <= x <= (measurement_rects[i][0] + measurement_rects[i][2]):
+                    if measurement_rects[i][1] <= y <= (measurement_rects[i][1] + measurement_rects[i][3]):
                         ThermalImageAnnotation.rect_index = i
                         ThermalImageAnnotation.xo = x
                         ThermalImageAnnotation.yo = y
@@ -760,7 +507,7 @@ class ThermalImageAnnotation:
                     break
 
         elif event == cv.EVENT_MOUSEMOVE:
-            if ThermalImageAnnotation.measurement_moving == True:
+            if ThermalImageAnnotation.measurement_moving:
                 measurement_cont[:, 0] += x - ThermalImageAnnotation.xo
                 measurement_cont[:, 1] += y - ThermalImageAnnotation.yo
 
@@ -798,7 +545,7 @@ class ThermalImageAnnotation:
                 ThermalImageAnnotation.xo = x
                 ThermalImageAnnotation.yo = y
 
-            if ThermalImageAnnotation.scale_moving == True:
+            if ThermalImageAnnotation.scale_moving:
                 scale_contour[:, 0] += x - ThermalImageAnnotation.xo
                 scale_contour[:, 1] += y - ThermalImageAnnotation.yo
 
@@ -815,7 +562,7 @@ class ThermalImageAnnotation:
                     ThermalImageAnnotation.xo = x
                     ThermalImageAnnotation.yo = y
 
-            if ThermalImageAnnotation.spots_moving == True:
+            if ThermalImageAnnotation.spots_moving:
                 spot_cont[:, 0, 0] += x - ThermalImageAnnotation.xo
                 spot_cont[:, 0, 1] += y - ThermalImageAnnotation.yo
 
@@ -884,6 +631,7 @@ class ThermalImageAnnotation:
 
     @classmethod
     def get_contours(cls, thermal_image, contours, is_rect=False):
+        """Get contours."""
         temp_image = thermal_image.copy()
         point1, point2 = [[]], [[]]
         cv.namedWindow("image")
@@ -896,7 +644,7 @@ class ThermalImageAnnotation:
                     temp_image = cv.rectangle(thermal_image.copy(), point1[0], point2[0], (0, 0, 255))
             k = cv.waitKey(1) & 0xFF
 
-            if k == 13 or k == 141:
+            if k in (13, 141):
                 redraw = None
                 if is_rect is True and (len(point1[0]) == 0 or len(point2[0]) == 0):
                     logger.warning("No rectangle has been drawn. Do you want to continue?")
@@ -913,11 +661,12 @@ class ThermalImageAnnotation:
         if is_rect:
             area_rect = point1[0][0], point1[0][1], abs(point1[0][0] - point2[0][0]), abs(point1[0][1] - point2[0][1])
             return area_rect
-        else:
-            return None
+
+        return None
 
     @staticmethod
     def get_measurement_contours(image, is_rect=False):
+        """Get measurement contours."""
         ThermalImageAnnotation.contour = []
         img = image.copy()
         area_rect = ThermalImageAnnotation.get_contours(
@@ -928,11 +677,12 @@ class ThermalImageAnnotation:
 
     @staticmethod
     def get_measurement_areas_values(image, thermal_np, raw_sensor_np, is_rect=False):
+        """Get measurement areas values."""
         measurement_areas_thermal_values = []
         measurement_area_indices = []
 
         for i in range(0, len(ThermalImageAnnotation.measurement_contours)):
-            raw_vals, thermal_vals, indices = ThermalImageHelpers.get_roi(
+            _, thermal_vals, indices = ThermalImageHelpers.get_roi(
                 thermal_np, raw_sensor_np, ThermalImageAnnotation.measurement_contours, i
             )
             measurement_areas_thermal_values.append(thermal_vals)
@@ -953,6 +703,7 @@ class ThermalImageAnnotation:
 
     @staticmethod
     def get_scaled_image(img, thermal_np, raw_sensor_np, cmap=cv.COLORMAP_JET, is_rect=False):
+        """Get scaled image."""
         ThermalImageAnnotation.scale_contours = []
         ThermalImageAnnotation.contour = []
         ThermalImageAnnotation.get_contours(img, ThermalImageAnnotation.scale_contours)
@@ -968,7 +719,7 @@ class ThermalImageAnnotation:
                 temp_scaled = ThermalImageHelpers.scale_with_roi(thermal_np, thermal_roi_values)
                 temp_scaled_image = ThermalImageHelpers.get_cmapped_temp_image(temp_scaled, colormap=cmap)
 
-        if flag == False:
+        if not flag:
             temp_scaled = thermal_np.copy()
             temp_scaled_image = ThermalImageHelpers.get_cmapped_temp_image(temp_scaled, colormap=cmap)
 
@@ -976,6 +727,7 @@ class ThermalImageAnnotation:
 
     @staticmethod
     def get_emissivity_changed_image(img, thermal_np, raw_sensor_np, meta, cmap=cv.COLORMAP_JET):
+        """Change emmisivity value for a marked region in image."""
         ThermalImageAnnotation.contour = []
         ThermalImageAnnotation.emissivity_contours = []
         ThermalImageAnnotation.get_contours(img, ThermalImageAnnotation.emissivity_contours)
@@ -984,7 +736,7 @@ class ThermalImageAnnotation:
         if len(ThermalImageAnnotation.emissivity_contours) > 0:
             if len(ThermalImageAnnotation.emissivity_contours[0]) >= 15:
                 flag = True
-                raw_roi_values, thermal_roi_values, indices = ThermalImageHelpers.get_roi(
+                raw_roi_values, _, indices = ThermalImageHelpers.get_roi(
                     thermal_np, raw_sensor_np, ThermalImageAnnotation.emissivity_contours, 0
                 )
                 emissivity_changed_array = ThermalImageHelpers.change_emissivity_for_roi(
@@ -994,7 +746,7 @@ class ThermalImageAnnotation:
                     emissivity_changed_array, colormap=cmap
                 )
 
-        if flag == False:
+        if not flag:
             emissivity_changed_array = thermal_np
             emissivity_changed_image = img
 
@@ -1003,8 +755,8 @@ class ThermalImageAnnotation:
 
 
 class ThermalSeqVideo:
-    """
-    Base class for splitting SEQ files into multiple fff and jpg files
+    r"""Base class for splitting SEQ files into multiple fff and jpg files.
+
     refer: https://exiftool.org/forum/index.php?topic=5279.0
     @purpose:
       Read .seq files from Flir IR camera and write each frame to temporary binary file.
@@ -1029,12 +781,15 @@ class ThermalSeqVideo:
     """
 
     def __init__(self, input_video):
+        """Initializer for ThermalSeqVideo."""
         self.split_thermal(input_video)
 
-    def __get_hex_sep_pattern(self, input_video):
-        """
-        Function to get the hex separation pattern from the seq file automatically.
-        The split, and replace functions might have to be modified. This hasn't been tried with files other than from the Zenmuse XT2
+    @staticmethod
+    def __get_hex_sep_pattern(input_video):
+        r"""Function to get the hex separation pattern from the seq file automatically.
+
+        The split, and replace functions might have to be modified.
+        This hasn't been tried with files other than from the Zenmuse XT2
         Information on '\\x':
         https://stackoverflow.com/questions/2672326/what-does-a-leading-x-mean-in-a-python-string-xaa
         https://www.experts-exchange.com/questions/26938912/Get-rid-of-escape-character.html
@@ -1052,7 +807,8 @@ class ThermalSeqVideo:
         pat = eval(pat)  # eval is apparently risky to use. Change later
         return pat
 
-    def __split_by_marker(self, f, marker="", block_size=10240):
+    @staticmethod
+    def __split_by_marker(f, marker="", block_size=10240):
         current = ""
         bolStartPos = True
         while True:
@@ -1061,14 +817,12 @@ class ThermalSeqVideo:
                 yield marker + current
                 return
             block = block.decode("latin-1")
-            # exit()
             current += block
             while True:
                 markerpos = current.find(marker)
-                if bolStartPos == True:
+                if bolStartPos:
                     current = current[markerpos + len(marker) :]
                     bolStartPos = False
-                    continue
                 elif markerpos < 0:
                     break
                 else:
@@ -1076,13 +830,14 @@ class ThermalSeqVideo:
                     current = current[markerpos + len(marker) :]
 
     def split_thermal(self, input_video, output_folder=None, path_to_base_thermal_class_folder="."):
-        """
-        Splits the thermal SEQ file into separate 'fff' frames by its hex separator pattern (TO DO: Find out more about how exactly this is done)
-        Inputs: 'input_video':thermal SEQ video, 'output_folder': Path to output folder (Creates folder if it doesn't exist)
+        """Splits the thermal SEQ file into separate 'fff' frames by its hex separator pattern.
+
+        (TO DO: Find out more about how exactly this is done)
+        Inputs: 'input_video':thermal SEQ video, 'output_folder': Path to output folder
+            (Creates folder if it doesn't exist)
         The Threading makes all the cores run at 100%, but it gives ~x4 speed-up.
         """
-
-        if output_folder == None:
+        if output_folder is None:
             output_folder = Path(input_video).with_suffix("")
 
         output_folder = Path(output_folder)
@@ -1107,12 +862,13 @@ class ThermalSeqVideo:
                 break
         return True
 
-    def split_visual(self, visual_video, fps, fps_ratio, output_folder="visual_frames"):
-        """
-        Splits video into frames based on the actual fps, and time between frames of the thermal sequence.
-        There is a sync issue where the thermal fps, and visual fps don't have an integer LCM/if LCM is v large. Have to try motion interpolation to fix this
-        """
+    @staticmethod
+    def split_visual(visual_video, fps, fps_ratio, output_folder="visual_frames"):
+        """Splits video into frames based on the actual fps, and time between frames of the thermal sequence.
 
+        There is a sync issue where the thermal fps, and visual fps don't have an integer LCM/if LCM is v large.
+        Have to try motion interpolation to fix this.
+        """
         output_folder = Path(output_folder)
         output_folder.mkdir(exist_ok=True)
         vid = cv.VideoCapture(visual_video)
@@ -1130,7 +886,7 @@ class ThermalSeqVideo:
             current_frame = vid.get(cv.CAP_PROP_POS_FRAMES)
             try:
                 current_time = (1 / fps) * current_frame
-            except:
+            except Exception:
                 current_time = 0
             ret, frame = vid.read()
             if ret:
@@ -1144,7 +900,8 @@ class ThermalSeqVideo:
 
 def get_thermal_image_from_file(thermal_input, thermal_class=ThermalImage, colormap=None):
     """
-    Function to get the image associated with each RJPG file using the FLIR Thermal base class ThermalImage
+    Function to get the image associated with each RJPG file using the FLIR Thermal base class ThermalImage.
+
     Saves the thermal images in the same place as the original RJPG
     """
     CThermal = thermal_class

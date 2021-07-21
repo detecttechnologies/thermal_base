@@ -3,12 +3,24 @@
 A python package for decoding and common processing for thermographs / thermograms. Currently supports FLIR's TIFF and PNG encoded metadata, and DJI-encoded metadata
 
 ## Install
-Install this package with `pip install git+ssh://git@github.com/detecttechnologies/thermal_base.git@main`
+1. This tool requires exiftools to be installed.
+    - Install with `sudo apt-get install exiftool`
+2. Install this package with `pip install git+https://github.com/detecttechnologies/thermal_base.git@main`
+
+## Usage
+Import and use the package as follows:
+```
+from thermal_base.thermal_base import ThermalImage
+from thermal_base import utils
+...
+...
+image = ThermalImage(image_path="path/to/image", camera_manufacturer="dji/flir")
+```
 
 **Disclaimer**
 
 Tested against data from: 
-* Flir encoding format: DJI XT-2, Flir E-40(Temperature values go out of bounds of the image for <255 height)
+* Flir encoding format: DJI XT-2, Flir E-40 (Temperature values go out of the image frame if the image height is <255 pixels)
 * DJI-encoding format: DJI Zenmuse H20-T
 * Thermapp (available in past commits)
 

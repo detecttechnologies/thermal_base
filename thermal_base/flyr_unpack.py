@@ -1,35 +1,33 @@
-#!/usr/bin/env python3
+"""Tools for extracting thermal data from FLIR images.
 
-# Standard library imports
+Derived from https://bitbucket.org/nimmerwoner/flyr/src/master/
+"""
 import os
-from io import BytesIO, BufferedIOBase
-from typing import Dict, List, Optional, BinaryIO, Any, Tuple, Union
+from io import BufferedIOBase, BytesIO
+from typing import BinaryIO, Dict, Optional, Tuple, Union
 
-# Third party imports
 import numpy as np
 from PIL import Image
 
-
 # Constants
-segment_sep = b"\xff"
-app1_marker = b"\xe1"
-magic_flir_def = b"FLIR\x00"
+SEGMENT_SEP = b"\xff"
+APP1_MARKER = b"\xe1"
+MAGIC_FLIR_DEF = b"FLIR\x00"
 
-chunk_app1_bytes_count = len(app1_marker)
-chunk_length_bytes_count = 2
-chunk_magic_bytes_count = len(magic_flir_def)
-chunk_skip_bytes_count = 1
-chunk_num_bytes_count = 1
-chunk_tot_bytes_count = 1
-chunk_partial_metadata_length = chunk_app1_bytes_count + chunk_length_bytes_count + chunk_magic_bytes_count
-chunk_metadata_length = (
-    chunk_partial_metadata_length + chunk_skip_bytes_count + chunk_num_bytes_count + chunk_tot_bytes_count
+CHUNK_APP1_BYTES_COUNT = len(APP1_MARKER)
+CHUNK_LENGTH_BYTES_COUNT = 2
+CHUNK_MAGIC_BYTES_COUNT = len(MAGIC_FLIR_DEF)
+CHUNK_SKIP_BYTES_COUNT = 1
+CHUNK_NUM_BYTES_COUNT = 1
+CHUNK_TOT_BYTES_COUNT = 1
+CHUNK_PARTIAL_METADATA_LENGTH = CHUNK_APP1_BYTES_COUNT + CHUNK_LENGTH_BYTES_COUNT + CHUNK_MAGIC_BYTES_COUNT
+CHUNK_METADATA_LENGTH = (
+    CHUNK_PARTIAL_METADATA_LENGTH + CHUNK_SKIP_BYTES_COUNT + CHUNK_NUM_BYTES_COUNT + CHUNK_TOT_BYTES_COUNT
 )
 
 
 def unpack(path_or_stream: Union[str, BinaryIO]) -> np.ndarray:
-    """Unpacks the FLIR image, meaning that it will return the thermal data
-    embedded in the image.
+    """Unpacks the FLIR image, meaning that it will return the thermal data embedded in the image.
 
     Parameters
     ----------
@@ -53,7 +51,7 @@ def unpack(path_or_stream: Union[str, BinaryIO]) -> np.ndarray:
 
         return raw_np
     else:
-        raise ValueError("Incorrect input")  # TODO improved error message
+        raise ValueError("Incorrect input")
 
 
 def extract_flir_app1(stream: BinaryIO) -> BinaryIO:
@@ -81,7 +79,7 @@ def extract_flir_app1(stream: BinaryIO) -> BinaryIO:
         A bytes stream of the APP1 FLIR segments
     """
     # Check JPEG-ness
-    magic_bytes = stream.read(2)
+    _ = stream.read(2)
 
     chunks_count: Optional[int] = None
     chunks: Dict[int, bytes] = {}
@@ -90,7 +88,7 @@ def extract_flir_app1(stream: BinaryIO) -> BinaryIO:
         if b == b"":
             break
 
-        if b != segment_sep:
+        if b != SEGMENT_SEP:
             continue
 
         parsed_chunk = parse_flir_chunk(stream, chunks_count)
@@ -120,28 +118,29 @@ def extract_flir_app1(stream: BinaryIO) -> BinaryIO:
 
 
 def parse_flir_chunk(stream: BinaryIO, chunks_count: Optional[int]) -> Optional[Tuple[int, int, bytes]]:
+    """Parse flir chunk."""
     # Parse the chunk header. Headers are as follows (definition with example):
     #
     #     \xff\xe1<length: 2 bytes>FLIR\x00\x01<chunk nr: 1 byte><chunk count: 1 byte>
     #     \xff\xe1\xff\xfeFLIR\x00\x01\x01\x0b
     #
     # Meaning: Exif APP1, 65534 long, FLIR chunk 1 out of 12
-    marker = stream.read(chunk_app1_bytes_count)
+    marker = stream.read(CHUNK_APP1_BYTES_COUNT)
 
-    length_bytes = stream.read(chunk_length_bytes_count)
+    length_bytes = stream.read(CHUNK_LENGTH_BYTES_COUNT)
     length = int.from_bytes(length_bytes, "big")
-    length -= chunk_metadata_length
-    magic_flir = stream.read(chunk_magic_bytes_count)
+    length -= CHUNK_METADATA_LENGTH
+    magic_flir = stream.read(CHUNK_MAGIC_BYTES_COUNT)
 
-    if not (marker == app1_marker and magic_flir == magic_flir_def):
+    if not (marker == APP1_MARKER and magic_flir == MAGIC_FLIR_DEF):
         # Seek back to just after byte b and continue searching for chunks
         stream.seek(-len(marker) - len(length_bytes) - len(magic_flir), 1)
         return None
 
     stream.seek(1, 1)  # skip 1 byte, unsure what it is for
 
-    chunk_num = int.from_bytes(stream.read(chunk_num_bytes_count), "big")
-    chunks_tot = int.from_bytes(stream.read(chunk_tot_bytes_count), "big")
+    chunk_num = int.from_bytes(stream.read(CHUNK_NUM_BYTES_COUNT), "big")
+    chunks_tot = int.from_bytes(stream.read(CHUNK_TOT_BYTES_COUNT), "big")
 
     # Remember total chunks to verify metadata consistency
     if chunks_count is None:
@@ -150,23 +149,21 @@ def parse_flir_chunk(stream: BinaryIO, chunks_count: Optional[int]) -> Optional[
     if (  # Check whether chunk metadata is consistent
         chunks_tot is None or chunk_num < 0 or chunk_num > chunks_tot or chunks_tot != chunks_count
     ):
-        raise ValueError(f"Invalid FLIR: inconsistent total chunks, should be 0 or greater, " "but is {chunks_tot}")
+        raise ValueError(f"Invalid FLIR: inconsistent total chunks, should be 0 or greater, but is {chunks_tot}")
 
-    # FIXME There is  calculation error somewhere which causes length to be
-    #       1 too small. So far it manually adding 1 seems sufficient to
-    #       correct for it, but it's not the right way.
-    #       Fix by figuring out what causes the off by 1 error.
     return chunks_tot, chunk_num, stream.read(length + 1)
 
 
 def parse_thermal(stream: BinaryIO, records: Dict[int, Tuple[int, int, int, int]]) -> np.ndarray:
+    """Parse thermal."""
     RECORD_IDX_RAW_DATA = 1
     raw_data_md = records[RECORD_IDX_RAW_DATA]
-    width, height, raw_data = parse_raw_data(stream, raw_data_md)
+    _, _, raw_data = parse_raw_data(stream, raw_data_md)
     return raw_data
 
 
 def parse_flir_app1(stream: BinaryIO) -> Dict[int, Tuple[int, int, int, int]]:
+    """Parse flir app1."""
     # 0x00 - string[4] file format ID = "FFF\0"
     # 0x04 - string[16] file creator: seen "\0","MTX IR\0","CAMCTRL\0"
     # 0x14 - int32u file format version = 100
@@ -179,15 +176,15 @@ def parse_flir_app1(stream: BinaryIO) -> Dict[int, Tuple[int, int, int, int]]:
     # 0x3c - int32u checksum
 
     # 1. Read 0x40 bytes and verify that its contents equals AFF\0 or FFF\0
-    file_format_id = stream.read(4)  # TODO the check
+    _ = stream.read(4)
 
     # 2. Read FLIR record directory metadata (ref 3)
     stream.seek(16, 1)
-    file_format_version = int.from_bytes(stream.read(4), "big")
+    _ = int.from_bytes(stream.read(4), "big")
     record_dir_offset = int.from_bytes(stream.read(4), "big")
     record_dir_entries_count = int.from_bytes(stream.read(4), "big")
     stream.seek(28, 1)
-    checksum = int.from_bytes(stream.read(4), "big")
+    _ = int.from_bytes(stream.read(4), "big")
 
     # 3. Read record directory (which is a FLIR record entry repeated
     # `record_dir_entries_count` times)
@@ -213,6 +210,7 @@ def parse_flir_app1(stream: BinaryIO) -> Dict[int, Tuple[int, int, int, int]]:
 
 
 def parse_flir_record_metadata(stream: BinaryIO, record_nr: int) -> Optional[Tuple[int, int, int, int]]:
+    """Parse flir record metadata."""
     # FLIR record entry (ref 3):
     # 0x00 - int16u record type
     # 0x02 - int16u record subtype: RawData 1=BE, 2=LE, 3=PNG; 1 for other record types
@@ -229,36 +227,27 @@ def parse_flir_record_metadata(stream: BinaryIO, record_nr: int) -> Optional[Tup
     if record_type < 1:
         return None
 
-    # TODO convert unnecessary reads to seeks
-    record_subtype = int.from_bytes(stream.read(2), "big")
-    record_version = int.from_bytes(stream.read(4), "big")
-    index_id = int.from_bytes(stream.read(4), "big")
+    _ = int.from_bytes(stream.read(2), "big")
+    _ = int.from_bytes(stream.read(4), "big")
+    _ = int.from_bytes(stream.read(4), "big")
     record_offset = int.from_bytes(stream.read(4), "big")
     record_length = int.from_bytes(stream.read(4), "big")
-    parent = int.from_bytes(stream.read(4), "big")
-    object_numer = int.from_bytes(stream.read(4), "big")
-    checksum = int.from_bytes(stream.read(4), "big")
-
+    _ = int.from_bytes(stream.read(4), "big")
+    _ = int.from_bytes(stream.read(4), "big")
+    _ = int.from_bytes(stream.read(4), "big")
     return (entry, record_type, record_offset, record_length)
 
 
-def parse_raw_data(
-    stream: BinaryIO, metadata: Tuple[int, int, int, int]
-):
-    (entry_idx, _, offset, length) = metadata
+def parse_raw_data(stream: BinaryIO, metadata: Tuple[int, int, int, int]):
+    """Parse raw data."""
+    (_, _, offset, length) = metadata
     stream.seek(offset)
 
-    # from PIL import ImageFile  # Uncomment to enable loading corrupt PNGs
-    # ImageFile.LOAD_TRUNCATED_IMAGES = True
-
-    stream.seek(2, 1)  # Skip first two bytes, TODO Explain the why of the skip
+    stream.seek(2, 1)
     width = int.from_bytes(stream.read(2), "little")
     height = int.from_bytes(stream.read(2), "little")
 
-    stream.seek(offset + 2 * 16)  # TODO document why 2 * 16
-    # data_format = stream.read(4)  # TODO Use format to support different FLIRs
-    # print(width, height, type)
-    # stream.seek(offset + 2*16)
+    stream.seek(offset + 32)
 
     # Read the bytes with the raw thermal data and decode using PIL
     thermal_bytes = stream.read(length)
@@ -268,7 +257,8 @@ def parse_raw_data(
 
     # Check shape
     if thermal_np.shape != (height, width):
-        msg = "Invalid FLIR: metadata's width and height don't match thermal data's actual width and height ({} vs ({}, {})"
+        msg = "Invalid FLIR: metadata's width and height don't match thermal data's actual width\
+            and height ({} vs ({}, {})"
         msg = msg.format(thermal_np.shape, height, width)
         raise ValueError(msg)
 
@@ -277,16 +267,3 @@ def parse_raw_data(
     thermal_np = fix_byte_order(thermal_np)
 
     return width, height, thermal_np
-
-
-if __name__ == "__main__":
-    import sys
-
-    if not len(sys.argv) == 2:
-        print("Usage: flyr.py <path_to_flir_file>")
-        exit()
-
-    # TODO Do something useful when called as script
-    file_path = sys.argv[1]
-    celsius = unpack(file_path).celsius
-    print(celsius)

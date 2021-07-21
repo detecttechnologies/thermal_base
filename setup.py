@@ -11,7 +11,7 @@ README = (HERE / "README.md").read_text()
 setup(
     name="thermal-base",
     version="1.0.0",
-    description="Tools for operating on thermal images",
+    description="Decoding and Basic processing of thermal images",
     long_description=README,
     long_description_content_type="text/markdown",
     url="https://github.com/detecttechnologies/thermal_base",
