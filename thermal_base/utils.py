@@ -96,8 +96,8 @@ def parse_from_exif_str(temp_str):
     """String to float parser."""
     # we assume degrees celsius for temperature, metres for length
     if isinstance(temp_str, str):
-        return float(temp_str)
-    return float(temp_str.split()[0])
+        return float(temp_str.split()[0])
+    return float(temp_str)
 
 
 def normalize_temp_matrix(thermal_np):
