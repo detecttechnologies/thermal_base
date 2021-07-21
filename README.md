@@ -2,6 +2,9 @@
 
 A python package for decoding and common processing for thermographs / thermograms. Currently supports FLIR's TIFF and PNG encoded metadata, and DJI-encoded metadata
 
+## Install
+Install this package with `pip install git@github.com:detecttechnologies/thermal_base.git@<main>`
+
 **Disclaimer**
 
 Tested against data from: 
