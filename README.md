@@ -2,6 +2,8 @@
 
 A python package for decoding and common processing for thermographs / thermograms. Currently supports FLIR's TIFF and PNG encoded metadata, and DJI-encoded metadata
 
+![Quality check](https://github.com/mukheshpugal/thermal_base/actions/workflows/qualitycheck.yml/badge.svg)
+
 ## Install
 1. This tool requires exiftools to be installed.
     - Install with `sudo apt-get install exiftool`
