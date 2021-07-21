@@ -21,6 +21,7 @@ plt.style.use("ggplot")
 
 class ThermalImage:
     """Thermal Image class."""
+
     def __init__(self, image_path, camera_manufacturer, color_map="jet", thermal_np=None):
         """Base Class for Thermal Images.
 
@@ -204,6 +205,7 @@ class ThermalImage:
 
 class ThermalImageAnnotation:
     """Base Class for Drawing on thermographs."""
+
     line_flag = False
     contour = []
     drawing = False
