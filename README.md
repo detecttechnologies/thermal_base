@@ -30,6 +30,9 @@ image = ThermalImage(image_path="path/to/image", camera_manufacturer="dji/flir")
 >*RJPG is also known as R-JPEG
 
 ## Notes
-* The use case for h20T camera can also be developed with dji-thermal-tool-analysis.Refer to [this link](https://exiftool.org/forum/index.php?topic=11401.0) to know more about the implementation. Also note that this method can be performed only with a 32 bit python interpreter and only on windows platform.
+* The use case for h20T camera can also be developed with dji-thermal-tool-analysis. Refer to [this link](https://exiftool.org/forum/index.php?topic=11401.0) to know more about the implementation. Also note that this method can be performed only with a 32 bit python interpreter and only on windows platform.
+
+## Credits
+* [Exiftool](https://exiftool.org/) is used to read metadata and raw values from thermal image files.
 * The `flyr_unpack.py` file was derived from the [flyr library](https://bitbucket.org/nimmerwoner/flyr/src/master/).
 * The conversion from raw to temperature values is done using raw2temp from [ThermImage-R](https://github.com/gtatters/Thermimage)
