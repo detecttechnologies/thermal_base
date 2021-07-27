@@ -17,13 +17,16 @@ Import and use the package as follows:
 from thermal_base import ThermalImage
 
 image = ThermalImage(image_path="path/to/image", camera_manufacturer="dji/flir")
-thermal_np, raw_sensor_np, meta = image.thermal_np, image.raw_sensor_np, image.meta
+thermal_np = image.thermal_np           # The temperature matrix as a np array
+raw_sensor_np = image.raw_sensor_np     # The raw thermal sensor excitation values as a np array
+meta = image.meta                       # Any other metadata that exiftool picked up
 ```
 - Manipulation
 ```python
 from thermal_base import utils
 
-thermal_np = utils.change_emissivity_for_roi(...)
+dir(utils)                                          # View manipulation tools available
+thermal_np = utils.change_emissivity_for_roi(...)   # Sample: Change the emissivity of an RoI
 ```
 
 This repo can be used in conjunction with [Thermal-Image-Analysis](https://github.com/detecttechnologies/Thermal-Image-Analysis) for an interactive experience.
