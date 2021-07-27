@@ -5,7 +5,7 @@ A python package for decoding and common processing for thermographs / thermogra
 [![Quality check](https://github.com/detecttechnologies/thermal_base/actions/workflows/qualitycheck.yml/badge.svg)](https://github.com/detecttechnologies/thermal_base/actions)
 
 ## Install
-1. This tool requires exiftools to be installed.
+1. This tool requires exiftool to be installed.
     - **Linux:** Run command `sudo apt-get install exiftool`
     - **Windows:** Download binary from https://exiftool.org/
 2. Install this package with `pip install git+https://github.com/detecttechnologies/thermal_base.git@main`
@@ -25,7 +25,7 @@ meta = image.meta                       # Any other metadata that exiftool picke
 ```python
 from thermal_base import utils
 
-dir(utils)                                          # View manipulation tools available
+print(dir(utils))                                   # View manipulation tools available
 thermal_np = utils.change_emissivity_for_roi(...)   # Sample: Change the emissivity of an RoI
 ```
 
@@ -34,12 +34,12 @@ This repo can be used in conjunction with [Thermal-Image-Analysis](https://githu
 ## Supported formats
 |Data Format|Sample Cameras|Support|
 |--|--|--|
-|FLIR RJPG with TIFF-format of thermal embedding|Zenmuse XT-2|✅|
-|FLIR RJPG with TIFF-format of thermal embedding|FLIR E-4, T660|✅|
-|DJI-encoded thermal image|Zenmuse H20-T|✅|
-|FLIR SEQ Thermal Video|Zenmuse XT-2|✅|
-|FLIR CSQ Thermal Video|Zenmuse XT-2|❌|
->*RJPG is also known as R-JPEG / Radiometric JPEG
+|FLIR RJPG with TIFF-format of thermal embedding|Zenmuse XT-2|:heavy_check_mark:|
+|FLIR RJPG with TIFF-format of thermal embedding|FLIR E-4, T660|:heavy_check_mark:|
+|DJI-encoded thermal image|Zenmuse H20-T|:heavy_check_mark:|
+|FLIR SEQ Thermal Video|Zenmuse XT-2|:heavy_check_mark:|
+|FLIR CSQ Thermal Video|Zenmuse XT-2|:x:|
+>*RJPG is also known as R-JPEG
 
 ## Notes
 * The use case for h20T camera can also be developed with dji-thermal-tool-analysis. Refer to [this link](https://exiftool.org/forum/index.php?topic=11401.0) to know more about the implementation. Also note that this method can be performed only with a 32 bit python interpreter and only on windows platform.
