@@ -31,11 +31,11 @@ This repo can be used in conjunction with [Thermal-Image-Analysis](https://githu
 ## Supported formats
 |Data Format|Sample Cameras|Support|
 |--|--|--|
-|FLIR RJPG with TIFF-format of thermal embedding|Zenmuse XT-2|✅|
-|FLIR RJPG with TIFF-format of thermal embedding|FLIR E-4, T660|✅|
-|DJI-encoded thermal image|Zenmuse H20-T|✅|
-|FLIR SEQ Thermal Video|Zenmuse XT-2|✅|
-|FLIR CSQ Thermal Video|Zenmuse XT-2|❌|
+|FLIR RJPG with TIFF-format of thermal embedding|Zenmuse XT-2|:heavy_check_mark:|
+|FLIR RJPG with TIFF-format of thermal embedding|FLIR E-4, T660|:heavy_check_mark:|
+|DJI-encoded thermal image|Zenmuse H20-T|:heavy_check_mark:|
+|FLIR SEQ Thermal Video|Zenmuse XT-2|:heavy_check_mark:|
+|FLIR CSQ Thermal Video|Zenmuse XT-2|:x:|
 >*RJPG is also known as R-JPEG
 
 ## Notes
