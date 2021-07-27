@@ -5,7 +5,7 @@ A python package for decoding and common processing for thermographs / thermogra
 [![Quality check](https://github.com/detecttechnologies/thermal_base/actions/workflows/qualitycheck.yml/badge.svg)](https://github.com/detecttechnologies/thermal_base/actions)
 
 ## Install
-1. This tool requires exiftools to be installed.
+1. This tool requires exiftool to be installed.
     - **Linux:** Run command `sudo apt-get install exiftool`
     - **Windows:** Download binary from https://exiftool.org/
 2. Install this package with `pip install git+https://github.com/detecttechnologies/thermal_base.git@main`
@@ -25,7 +25,7 @@ meta = image.meta                       # Any other metadata that exiftool picke
 ```python
 from thermal_base import utils
 
-dir(utils)                                          # View manipulation tools available
+print(dir(utils))                                   # View manipulation tools available
 thermal_np = utils.change_emissivity_for_roi(...)   # Sample: Change the emissivity of an RoI
 ```
 
