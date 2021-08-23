@@ -1,6 +1,6 @@
 # Base codes for Thermography
 
-A python package for decoding and common processing for thermographs / thermograms. Currently supports FLIR's TIFF and PNG encoded metadata, and DJI-encoded metadata
+A python package for decoding and common processing for thermographs / thermograms
 
 [![Quality check](https://github.com/detecttechnologies/thermal_base/actions/workflows/qualitycheck.yml/badge.svg)](https://github.com/detecttechnologies/thermal_base/actions)
 
@@ -8,7 +8,8 @@ A python package for decoding and common processing for thermographs / thermogra
 1. This tool requires exiftool to be installed.
     - **Linux:** Run command `sudo apt-get install exiftool`
     - **Windows:** Download binary from https://exiftool.org/
-2. Install this package with `pip install git+https://github.com/detecttechnologies/thermal_base.git@main`
+2. This tool also requires you to have Python 3+ installed. You can install it from the official website (https://www.python.org/downloads/)
+2. Install this package with `python3 -m pip install git+https://github.com/detecttechnologies/thermal_base.git@main`
 
 ## Usage
 Import and use the package as follows:
@@ -35,10 +36,11 @@ This repo can be used in conjunction with [Thermal-Image-Analysis](https://githu
 |Data Format|Sample Cameras|Support|
 |--|--|--|
 |FLIR RJPG with TIFF-format of thermal embedding|Zenmuse XT-2|:heavy_check_mark:|
-|FLIR RJPG with TIFF-format of thermal embedding|FLIR E-4, T660|:heavy_check_mark:|
+|FLIR RJPG with PNG-format of thermal embedding|FLIR E-4, T640, T660|:heavy_check_mark:|
 |DJI-encoded thermal image|Zenmuse H20-T|:heavy_check_mark:|
 |FLIR SEQ Thermal Video|Zenmuse XT-2|:heavy_check_mark:|
 |FLIR CSQ Thermal Video|Zenmuse XT-2|:x:|
+|Seek HIR Format Images|Seek Shot|:x:|
 >*RJPG is also known as R-JPEG
 
 ## Notes
@@ -46,5 +48,5 @@ This repo can be used in conjunction with [Thermal-Image-Analysis](https://githu
 
 ## Credits
 * [Exiftool](https://exiftool.org/) is used to read metadata and raw values from thermal image files.
-* The `flyr_unpack.py` file was derived from the [flyr library](https://bitbucket.org/nimmerwoner/flyr/src/master/).
+* The `flyr_unpack.py` file for PNG-encoded FLIR metadata was derived from the [flyr library](https://bitbucket.org/nimmerwoner/flyr/src/master/).
 * The conversion from raw to temperature values is done using raw2temp from [ThermImage-R](https://github.com/gtatters/Thermimage)
