@@ -2,7 +2,7 @@
 import io
 import json
 import subprocess as sp
-import sys
+import sys, os, platform
 from pathlib import Path
 from threading import Thread
 
@@ -126,14 +126,27 @@ class ThermalImage:
 
         ## calculating the raw sensor values
 
-        im = Image.open(self.image_path)
-        # concatenate APP3 chunks of data
-        a = im.applist[3][1]
-        for i in range(4, 14):
-            a += im.applist[i][1]
-        # create image from bytes
-        img = Image.frombytes("I;16L", (640, 512), a)
+        # OS and architecture checks
+        os_name = "windows" if "win" in sys.platform else "linux"
+        architecture_name = "release_x64" if "64bit" in platform.architecture()[0] else "release_x86"
+        dji_binary = "dji_irp.exe" if "win" in sys.platform else "dji_irp"
+        if "linux" in os_name:
+            # Linux needs path of libdirp.so file added to Environment variable and Execute permission to executable file
+            path_executable = os.path.join("./dji_executables", os_name, architecture_name)
+            os.environ['LD_LIBRARY_PATH'] = path_executable
+            sp.run(["chmod", "u+x", os.path.join(path_executable, dji_binary)])
+        else:
+            path_executable = os.path.join("dji_executables", os_name, architecture_name)
+        
+        # Run executable file dji_irp passing image path and prevent output printing to console. Raw file generated
+        sp.run([os.path.join(path_executable, dji_binary), "-s", f"{self.image_path}", "-a", "extract"], \
+            universal_newlines=True, stdout=sp.DEVNULL, stderr=sp.STDOUT)  
+        data = Path('output.raw').read_bytes()
+        img = Image.frombytes("I;16L", (640, 512), data)
+        # After the data is read from the output.raw file, remove the file
+        os.remove("output.raw")
 
+        # Extract raw sensor values from generated image into numpy array
         raw_sensor_np = np.array(img)
 
         ## extracting the temperatures from thermal images
