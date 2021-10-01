@@ -9,8 +9,7 @@ A python package for decoding and common processing for thermographs / thermogra
     - **Linux:** Run command `sudo apt-get install exiftool`
     - **Windows:** Download binary from https://exiftool.org/
 2. This tool also requires you to have Python 3+ installed. You can install it from the official website (https://www.python.org/downloads/)
-3. DJI-encoded images need folder containing executable files present in the same directory as the python file which imports the thermal_base package. Download the zip file from [here](https://dtpl-ai-public.s3.ap-south-1.amazonaws.com/Thermal_Image_Analysis/DJI_SDK/dji_executables.zip) and extract the contents to the location of your python file that uses the `thermal_base` package such that the extracted folder `dji_executables` has 2 subfolders named `linux` and `windows` directly inside of it.
-4. Install this package with `python3 -m pip install git+https://github.com/detecttechnologies/thermal_base.git@main`
+3. Install this package with `python3 -m pip install git+https://github.com/detecttechnologies/thermal_base.git@main`
 
 ## Usage
 Import and use the package as follows:
