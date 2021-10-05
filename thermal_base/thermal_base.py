@@ -149,7 +149,7 @@ class ThermalImage:
             path_executable = str(Path("./dji_executables", os_name, architecture_name))
             os.environ['LD_LIBRARY_PATH'] = path_executable
             sp.run(["chmod", "u+x", str(Path(path_executable, dji_binary))])
-        else:
+        elif "windows" in os_name:
             path_executable = str(Path("dji_executables", os_name, architecture_name))
         
         # Run executable file dji_irp passing image path and prevent output printing to console. Raw file generated.
