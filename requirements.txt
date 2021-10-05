@@ -5,4 +5,5 @@ logzero >= 1.7.0
 matplotlib >= 3.4.0
 numpy >= 1.19.5
 opencv_python >= 4.5.1.48
+requests >= 2.25.1
 tqdm >= 4.59.0

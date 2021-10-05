@@ -104,8 +104,8 @@ class ThermalImage:
         
         The raw sensor values are obtained using the sample binaries provided in the official Thermal SDK by DJI. 
         The executable file is run and generates a 16 bit unsigned RAW image with Little Endian byte order.
-        Link to DJI Forum post: https://forum.dji.com/forum.php?mod=redirect&goto=findpost&ptid=230321&pid=2389016"""
-
+        Link to DJI Forum post: https://forum.dji.com/forum.php?mod=redirect&goto=findpost&ptid=230321&pid=2389016
+        """
         # read image metadata for the dji camera images
         exif_binary = "exiftool.exe" if "win" in sys.platform else "exiftool"
         meta = sp.Popen(
