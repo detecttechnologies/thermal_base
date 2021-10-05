@@ -9,7 +9,7 @@ A python package for decoding and common processing for thermographs / thermogra
     - **Linux:** Run command `sudo apt-get install exiftool`
     - **Windows:** Download binary from https://exiftool.org/
 2. This tool also requires you to have Python 3+ installed. You can install it from the official website (https://www.python.org/downloads/)
-2. Install this package with `python3 -m pip install git+https://github.com/detecttechnologies/thermal_base.git@main`
+3. Install this package with `python3 -m pip install git+https://github.com/detecttechnologies/thermal_base.git@main`
 
 ## Usage
 Import and use the package as follows:
