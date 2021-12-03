@@ -101,19 +101,24 @@ class ThermalImage:
 
     def extract_temperatures_dji(self):
         """Extracts the DJI-encoded thermal image as 2D floating-point numpy array with temperatures in degC.
-        
-        The raw sensor values are obtained using the sample binaries provided in the official Thermal SDK by DJI. 
+
+        The raw sensor values are obtained using the sample binaries provided in the official Thermal SDK by DJI.
         The executable file is run and generates a 16 bit unsigned RAW image with Little Endian byte order.
         Link to DJI Forum post: https://forum.dji.com/forum.php?mod=redirect&goto=findpost&ptid=230321&pid=2389016
         """
         # read image metadata for the dji camera images
         exif_binary = "exiftool.exe" if "win" in sys.platform else "exiftool"
-        meta = sp.Popen(
-            (f'"{exif_binary}"  "{self.image_path}"'),
+        meta_json = sp.Popen(
+            (
+                f'{exif_binary} "{self.image_path}" -Emissivity -ObjectDistance -AtmosphericTemperature '
+                "-ReflectedApparentTemperature -IRWindowTemperature -IRWindowTransmission -RelativeHumidity "
+                "-PlanckR1 -PlanckB -PlanckF -PlanckO -PlanckR2 -Make -Model -j"
+            ),
             shell=True,
             stdout=sp.PIPE,
         ).communicate()[0]
-        meta = meta.decode("utf8")
+        meta = json.loads(meta_json)[0]
+        camera_model = meta["Model"]
 
         meta = {
             "Emissivity": 1.0,
@@ -136,10 +141,12 @@ class ThermalImage:
         os_name = "windows" if "win" in sys.platform else "linux"
         architecture_name = "release_x64" if "64bit" in platform.architecture()[0] else "release_x86"
         dji_binary = "dji_irp.exe" if "win" in sys.platform else "dji_irp"
-        dji_executables_url = "https://dtpl-ai-public.s3.ap-south-1.amazonaws.com/Thermal_Image_Analysis/DJI_SDK/dji_executables.zip"
+        dji_executables_url = (
+            "https://dtpl-ai-public.s3.ap-south-1.amazonaws.com/Thermal_Image_Analysis/DJI_SDK/dji_executables.zip"
+        )
 
         # If DJI executable files aren't present, download them and extract the folder contents.
-        if not Path('dji_executables').exists():
+        if not Path("dji_executables").exists():
             r = requests.get(dji_executables_url, stream=True)
             z = zipfile.ZipFile(io.BytesIO(r.content))
             z.extractall()
@@ -147,19 +154,33 @@ class ThermalImage:
         if "linux" in os_name:
             # Linux needs path of libdirp.so file added to Environment variable and Execute permission to executable file.
             path_executable = str(Path("./dji_executables", os_name, architecture_name))
-            os.environ['LD_LIBRARY_PATH'] = path_executable
+            os.environ["LD_LIBRARY_PATH"] = path_executable
             sp.run(["chmod", "u+x", str(Path(path_executable, dji_binary))])
         elif "windows" in os_name:
             path_executable = str(Path("dji_executables", os_name, architecture_name))
-        
-        # Run executable file dji_irp passing image path and prevent output printing to console. Raw file generated.
-        sp.run([str(Path(path_executable, dji_binary)), "-s", f"{self.image_path}", "-a", "extract"], \
-            universal_newlines=True, stdout=sp.DEVNULL, stderr=sp.STDOUT)  
-        data = Path('output.raw').read_bytes()
-        # Read the contents of the generated output.raw file.
-        img = Image.frombytes("I;16L", (640, 512), data)
-        # After the data is read from the output.raw file, remove the file
-        os.remove("output.raw")
+
+        if "MAVIC" not in camera_model:
+            # Run executable file dji_irp passing image path and prevent output printing to console. Raw file generated.
+            sp.run(
+                [str(Path(path_executable, dji_binary)), "-s", f"{self.image_path}", "-a", "extract"],
+                universal_newlines=True,
+                stdout=sp.DEVNULL,
+                stderr=sp.STDOUT,
+            )
+            data = Path("output.raw").read_bytes()
+            # Read the contents of the generated output.raw file.
+            img = Image.frombytes("I;16L", (640, 512), data)
+            # After the data is read from the output.raw file, remove the file
+            os.remove("output.raw")
+        else:
+            # Adding support for MAVIC2-ENTERPRISE-ADVANCED Camera images
+            im = Image.open(self.image_path)
+            # concatenate APP3 chunks of data
+            a = im.applist[3][1]
+            for i in range(4, 14):
+                a += im.applist[i][1]
+            # create image from bytes
+            img = Image.frombytes("I;16L", (640, 512), a)
 
         # Extract raw sensor values from generated image into numpy array
         raw_sensor_np = np.array(img)
